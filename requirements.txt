@@ -1,0 +1,6 @@
+# Guia del archivo requirements.txt
+# https://pip.pypa.io/en/stable/reference/requirements-file-format/
+
+# Mae por el momento esta vacio, si se instala alguna biblioteca con pip,
+# se pone aqui, por ejemplo:
+# docopt == 0.6.1
