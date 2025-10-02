@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 """
 Protocol 4 (Sliding Window de 1 bit, bidireccional).
@@ -14,6 +13,7 @@ class Protocol4SlidingWindow1Bit:
         self.MAX_SEQ = 1  # 0/1
 
     def run(self, steps: int = 10_000):
+        print(f"Ejecutando protocolo sliding-1bit con {steps} pasos.")
         next_frame_to_send = 0   # 0 o 1
         frame_expected = 0       # 0 o 1
 
@@ -27,20 +27,26 @@ class Protocol4SlidingWindow1Bit:
         s.ack = (1 - frame_expected)
         self.env.to_physical_layer(s)
         self.env.start_timer(s.seq)
+        print(f"Frame enviado: {s.seq}, Ack: {s.ack}")
 
-        for _ in range(steps):
+        for i in range(steps):
+            print(f"Paso {i + 1}/{steps}")
             event = self.env.wait_for_event()
+            print(f"Evento recibido: {event}")
+
             if event == EventType.FRAME_ARRIVAL:
                 r = Frame()
                 self.env.from_physical_layer(r)
 
                 # Flujo entrante
                 if r.seq == frame_expected:
+                    print(f"Frame recibido con secuencia: {r.seq}, Ack: {r.ack}")
                     self.env.to_network_layer(r.info)
                     frame_expected = inc(frame_expected, self.MAX_SEQ)
 
                 # Flujo saliente (piggyback ACK)
                 if r.ack == next_frame_to_send:
+                    print(f"ACK recibido para el frame {r.seq}, deteniendo temporizador")
                     self.env.stop_timer(r.ack)
                     self.env.from_network_layer(buffer)
                     next_frame_to_send = inc(next_frame_to_send, self.MAX_SEQ)
@@ -52,3 +58,12 @@ class Protocol4SlidingWindow1Bit:
             s.ack = (1 - frame_expected)
             self.env.to_physical_layer(s)
             self.env.start_timer(s.seq)
+            print(f"Frame enviado: {s.seq}, Ack: {s.ack}")
+
+            # Si ambos extremos han terminado de enviar todos los datos, terminamos
+            if frame_expected == next_frame_to_send:
+                print("Todos los paquetes enviados y recibidos correctamente.")
+                break
+
+        print(f"Protocolo completado en {i + 1} pasos")
+
