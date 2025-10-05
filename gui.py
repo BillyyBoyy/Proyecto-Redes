@@ -9,6 +9,7 @@ import threading
 import time
 import traceback
 import queue
+import re
 from typing import List, Optional
 
 import tkinter as tk
@@ -17,8 +18,8 @@ from tkinter.scrolledtext import ScrolledText
 
 # ---------------- Estado de ejecución (id del hilo runner) -------------------
 _RUNNER_TID: Optional[int] = None  # Se asigna al lanzar la simulación
-_STOP_REQUESTED = False  # Bandera global para stop
-_STOPPING = False  # Bandera para indicar que estamos en proceso de stop
+_STOP_REQUESTED = False            # Bandera global para stop
+_STOPPING = False                  # Bandera para indicar que estamos en proceso de stop
 
 # --- Import de configuración y utilidades del proyecto -----------------------
 try:
@@ -79,14 +80,13 @@ def parse_csv(s: str) -> List[str]:
 
 class TextRedirector:
     """
-    Redirige stdout/stderr a un ScrolledText de Tk.
-    *** Importante ***
-    - Si el write ocurre en el hilo runner (_RUNNER_TID), antes de encolar el texto
-      verifica pausa/stop (con _aux.sleep_step(0)). Esto garantiza que cualquier print
-      del protocolo coopere con Pausa/Stop.
+    Redirige stdout/stderr a un ScrolledText de Tk y opcionalmente notifica
+    cada línea a un 'listener' (para la vista animada).
+    También coopera con Pausa/Stop cuando escribe el hilo runner.
     """
-    def __init__(self, widget: ScrolledText):
+    def __init__(self, widget: ScrolledText, listener=None):
         self.widget = widget
+        self.listener = listener
         self.queue = queue.Queue()
         self._stop = False
         self.widget.after(50, self._drain)
@@ -95,12 +95,14 @@ class TextRedirector:
         # Si estamos en proceso de stop, no hacer chequeos de pausa/stop
         if _STOPPING:
             self.queue.put(msg)
+            if self.listener:
+                try: self.listener(msg)
+                except Exception: pass
             return
 
         # Cooperar SOLO si escribe el hilo runner (no la GUI)
         try:
             if _RUNNER_TID is not None and threading.get_ident() == _RUNNER_TID:
-                # Usar sleep_step si existe; si no, hacer un chequeo manual
                 if _aux is not None and hasattr(_aux, "sleep_step") and not _STOP_REQUESTED:
                     _aux.sleep_step(0.0)  # respeta pausa y puede lanzar KeyboardInterrupt
                 else:
@@ -109,11 +111,14 @@ class TextRedirector:
                     while bool(get_setting("paused")) and not (_STOP_REQUESTED or bool(get_setting("stop_requested"))):
                         time.sleep(0.05)
         except KeyboardInterrupt:
-            # Propagar para que el runner lo capture y salga
             raise
 
         # Encolar el texto (no bloquear el hilo)
         self.queue.put(msg)
+        # Notificar al listener para animación
+        if self.listener:
+            try: self.listener(msg)
+            except Exception: pass
 
     def flush(self):
         pass
@@ -132,13 +137,151 @@ class TextRedirector:
     def stop(self):
         self._stop = True
 
+# ------------------------------ Visualizador embebido --------------------------
+class InlineVisualizer(ttk.Frame):
+    """
+    Visualizador simple A ↔ B embebido en GUI.
+    Reacciona a textos impresos por los protocolos:
+      "A → medio:"  -> inicia A→B
+      "medio → B:"  -> finaliza A→B
+      "B → medio:"  -> inicia B→A
+      "medio → A:"  -> finaliza B→A
+    """
+    RE_A_TO_MED = re.compile(r"^\s*A\s*→\s*medio\s*:", re.I)
+    RE_MED_TO_B = re.compile(r"^\s*medio\s*→\s*B\s*:", re.I)
+    RE_B_TO_MED = re.compile(r"^\s*B\s*→\s*medio\s*:", re.I)
+    RE_MED_TO_A = re.compile(r"^\s*medio\s*→\s*A\s*:", re.I)
+
+    def __init__(self, master):
+        super().__init__(master)
+        self.paused = False
+        self.in_flight = False
+        self.direction = None  # "A2B" | "B2A"
+        self.dot_id = None
+        self.after_id = None
+        self.x = None; self.x_end = None; self.y = None
+        self.step_px = 8
+        self.delay_ms = 24
+        self.dot_radius = 7
+
+        # UI
+        self.columnconfigure(0, weight=1)
+        ttk.Label(self, text="Vista animada A ↔ B", font=("TkDefaultFont", 10, "bold")).grid(
+            row=0, column=0, sticky="w", pady=(4, 2)
+        )
+        self.canvas = tk.Canvas(self, bg="white", height=160)
+        self.canvas.grid(row=1, column=0, sticky="ew")
+        self._layout_coords()
+        self._draw_scene()
+
+    def _layout_coords(self):
+        self.ax1, self.ay1, self.ax2, self.ay2 = 40, 50, 120, 120
+        self.bx1, self.by1, self.bx2, self.by2 = 480, 50, 560, 120
+        self.y_link = (self.ay1 + self.ay2) // 2
+        self.link_left = self.ax2 + 14
+        self.link_right = self.bx1 - 14
+
+    def _draw_scene(self):
+        c = self.canvas
+        c.delete("all")
+        c.create_rectangle(self.ax1, self.ay1, self.ax2, self.ay2, fill="#EAF2FF", outline="#4A77F0", width=2)
+        c.create_text((self.ax1 + self.ax2)//2, self.ay1-10, text="A")
+        c.create_rectangle(self.bx1, self.by1, self.bx2, self.by2, fill="#EAF2FF", outline="#4A77F0", width=2)
+        c.create_text((self.bx1 + self.bx2)//2, self.by1-10, text="B")
+        c.create_line(self.link_left, self.y_link, self.link_right, self.y_link, fill="#999", width=2)
+
+    # API
+    def set_paused(self, value: bool):
+        if bool(value) != self.paused:
+            self.paused = bool(value)
+            if self.paused and self.after_id:
+                try: self.after_cancel(self.after_id)
+                except Exception: pass
+                self.after_id = None
+            elif (not self.paused) and self.in_flight and self.dot_id is not None:
+                self._schedule_next()
+
+    def consume_log(self, line: str):
+        s = (line or "").strip()
+        if not s:
+            return
+        if self.RE_A_TO_MED.match(s):
+            self._start_anim_A2B(); return
+        if self.RE_MED_TO_B.match(s):
+            self._finish_if_dir("A2B"); return
+        if self.RE_B_TO_MED.match(s):
+            self._start_anim_B2A(); return
+        if self.RE_MED_TO_A.match(s):
+            self._finish_if_dir("B2A"); return
+
+    # Animación
+    def _start_anim_A2B(self):
+        if self.in_flight: return
+        self.direction = "A2B"
+        self._spawn_dot(self.link_left, self.link_right)
+
+    def _start_anim_B2A(self):
+        if self.in_flight: return
+        self.direction = "B2A"
+        self._spawn_dot(self.link_right, self.link_left)
+
+    def _spawn_dot(self, x0, x1):
+        if self.dot_id is not None:
+            self.canvas.delete(self.dot_id)
+            self.dot_id = None
+        self.x = x0; self.x_end = x1; self.y = self.y_link
+        r = self.dot_radius
+        self.dot_id = self.canvas.create_oval(self.x-r, self.y-r, self.x+r, self.y+r, outline="", fill="#4A77F0")
+        self.in_flight = True
+        if not self.paused:
+            self._schedule_next()
+
+    def _finish_if_dir(self, direction):
+        if self.in_flight and self.direction == direction and self.dot_id is not None:
+            self.canvas.coords(
+                self.dot_id,
+                self.x_end - self.dot_radius, self.y - self.dot_radius,
+                self.x_end + self.dot_radius, self.y + self.dot_radius
+            )
+            self.in_flight = False
+            self.direction = None
+            if self.after_id:
+                try: self.after_cancel(self.after_id)
+                except Exception: pass
+            self.after_id = None
+
+    def _schedule_next(self):
+        if self.after_id:
+            try: self.after_cancel(self.after_id)
+            except Exception: pass
+        self.after_id = self.after(self.delay_ms, self._tick)
+
+    def _tick(self):
+        if self.paused or not self.in_flight or self.dot_id is None:
+            self.after_id = None
+            return
+        step = self.step_px if self.x_end >= self.x else -self.step_px
+        nx = self.x + step
+        reached = (nx >= self.x_end) if self.x_end >= self.x else (nx <= self.x_end)
+        if reached:
+            nx = self.x_end
+        dx = nx - self.x
+        self.canvas.move(self.dot_id, dx, 0)
+        self.x = nx
+        if reached:
+            self.in_flight = False
+            self.direction = None
+            self.after_id = None
+            return
+        self._schedule_next()
+
 # ------------------------------ Ventana principal -----------------------------
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("SIMULADOR DE PROTOCOLOS — GUI")
-        self.geometry("1100x700")
-        self.minsize(980, 620)
+        self.geometry("1100x720")
+        self.minsize(980, 640)
 
         # Estado ejecución
         self.run_thread: Optional[threading.Thread] = None
@@ -147,15 +290,15 @@ class App(tk.Tk):
 
         # Layout principal
         self.columnconfigure(0, weight=0)  # panel izquierdo
-        self.columnconfigure(1, weight=1)  # consola
+        self.columnconfigure(1, weight=1)  # panel derecho (consola + animación)
         self.rowconfigure(0, weight=1)
 
         self._build_left_panel()
-        self._build_console()
+        self._build_console_and_visualizer()
 
-        # Redirección de stdout/err
-        self.stdout_redirect = TextRedirector(self.console)
-        self.stderr_redirect = TextRedirector(self.console)
+        # Redirección de stdout/err (con listener para la animación)
+        self.stdout_redirect = TextRedirector(self.console, listener=self._on_log_line)
+        self.stderr_redirect = TextRedirector(self.console, listener=self._on_log_line)
 
         self._orig_stdout = sys.stdout
         self._orig_stderr = sys.stderr
@@ -231,7 +374,7 @@ class App(tk.Tk):
         run.grid(row=4, column=0, columnspan=2, sticky="ew", pady=5)
         run.columnconfigure(0, weight=1); run.columnconfigure(1, weight=1); run.columnconfigure(2, weight=1)
 
-        self.btn_run = ttk.Button(run, text="▶ Ejecutar", command=self.start_run); self.btn_run.grid(row=0, column=0, sticky="ew", padx=(0,4))
+        self.btn_run   = ttk.Button(run, text="▶ Ejecutar", command=self.start_run); self.btn_run.grid(row=0, column=0, sticky="ew", padx=(0,4))
         self.btn_pause = ttk.Button(run, text="⏸ Pausar", command=self.toggle_pause, state="disabled"); self.btn_pause.grid(row=0, column=1, sticky="ew", padx=4)
         self.btn_stop  = ttk.Button(run, text="⏹ Detener", command=self.stop_run, state="disabled"); self.btn_stop.grid(row=0, column=2, sticky="ew", padx=(4,0))
 
@@ -239,12 +382,20 @@ class App(tk.Tk):
         ttk.Button(extras, text="Limpiar consola", command=self.clear_console).grid(row=0, column=0, sticky="ew")
         ttk.Button(extras, text="Acerca de…", command=self._about).grid(row=0, column=1, sticky="ew", padx=(6,0))
 
-    # ---------- UI: Consola de salida ----------
-    def _build_console(self):
+    # ---------- UI: Consola + Visualizador ----------
+    def _build_console_and_visualizer(self):
         right = ttk.Frame(self, padding=10); right.grid(row=0, column=1, sticky="nsew")
         right.rowconfigure(1, weight=1); right.columnconfigure(0, weight=1)
+
         ttk.Label(right, text="Consola de salida", font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="w", pady=(0,6))
-        self.console = ScrolledText(right, wrap="word", height=10); self.console.grid(row=1, column=0, sticky="nsew")
+        self.console = ScrolledText(right, wrap="word", height=12)
+        self.console.grid(row=1, column=0, sticky="nsew")
+
+        ttk.Separator(right).grid(row=2, column=0, sticky="ew", pady=8)
+
+        # Inline visualizer embebido debajo de la consola
+        self.inline_vis = InlineVisualizer(right)
+        self.inline_vis.grid(row=3, column=0, sticky="ew")
 
     # ---------- Lógica de entradas dinámicas ----------
     def _refresh_inputs(self):
@@ -280,6 +431,7 @@ class App(tk.Tk):
             ttk.Label(self.inputs_frame, text="Mensajes B (coma):").grid(row=2, column=0, sticky="w")
             self.var_data2.set("r1,r2,r3")
             ttk.Entry(self.inputs_frame, textvariable=self.var_data2).grid(row=2, column=1, sticky="ew", padx=6)
+
         elif proto == "Selective-Repeat":
             ttk.Label(self.inputs_frame, text="Tamaño de ventana (w):").grid(row=0, column=0, sticky="w")
             self.var_win.set(3)
@@ -293,17 +445,7 @@ class App(tk.Tk):
             ttk.Label(self.inputs_frame, text="Mensajes B (coma):").grid(row=2, column=0, sticky="w")
             self.var_data2.set("r1,r2,r3")
             ttk.Entry(self.inputs_frame, textvariable=self.var_data2).grid(row=2, column=1, sticky="ew", padx=6)
-        '''    Comentado para agregar selective-repeat bidireccional.
-        else:  # Selective-Repeat (unidireccional en tu versión)
-            ttk.Label(self.inputs_frame, text="Tamaño de ventana (w):").grid(row=0, column=0, sticky="w")
-            self.var_win.set(3)
-            ttk.Spinbox(self.inputs_frame, from_=1, to=32, textvariable=self.var_win, width=6)\
-                .grid(row=0, column=1, sticky="w", padx=6)
 
-            ttk.Label(self.inputs_frame, text="Datos (coma):").grid(row=1, column=0, sticky="w")
-            self.var_data.set("a,b,c,d,e,f")
-            ttk.Entry(self.inputs_frame, textvariable=self.var_data).grid(row=1, column=1, sticky="ew", padx=6)
-        '''
     def _load_current_settings(self):
         try:
             self.var_error.set(float(get_setting("error_rate") or 0.0))
@@ -311,7 +453,6 @@ class App(tk.Tk):
             self.var_step.set(float(get_setting("step_delay") or 0.25))
         except Exception:
             pass
-        # refrescar labels
         self.lbl_error.config(text=f"{self.var_error.get():.2f}")
         self.lbl_timeout.config(text=f"{self.var_timeout.get():.2f}")
         self.lbl_step.config(text=f"{self.var_step.get():.2f} s")
@@ -327,6 +468,11 @@ class App(tk.Tk):
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo aplicar configuración:\n{e}")
 
+    # ---------- Animación: hook de logs ----------
+    def _on_log_line(self, line: str):
+        if hasattr(self, "inline_vis") and self.inline_vis.winfo_exists():
+            self.inline_vis.consume_log(line)
+
     # ---------- Ejecución ----------
     def start_run(self):
         global _RUNNER_TID, _STOP_REQUESTED, _STOPPING
@@ -340,6 +486,8 @@ class App(tk.Tk):
         _STOP_REQUESTED = False
         _STOPPING = False
         self.paused = False
+        if hasattr(self, "inline_vis") and self.inline_vis.winfo_exists():
+            self.inline_vis.set_paused(False)
 
         proto = self.var_proto.get()
         try:
@@ -360,7 +508,7 @@ class App(tk.Tk):
                 w = int(self.var_win.get())
                 a_list = parse_csv(self.var_data.get())
                 b_list = parse_csv(self.var_data2.get())
-                fn = lambda: test_sr(w, a_list, b_list)
+                fn = lambda: test_sr(w, a_list, b_list)    # versión bidireccional
             else:
                 messagebox.showwarning("Atención", "Selecciona un protocolo válido.")
                 return
@@ -399,7 +547,6 @@ class App(tk.Tk):
         self.run_thread = threading.Thread(target=runner, daemon=True)
         self.run_thread.start()
 
-
     def _finish_run_ui(self):
         global _STOP_REQUESTED, _STOPPING
         self.running = False
@@ -411,26 +558,27 @@ class App(tk.Tk):
         self.btn_run.config(state="normal")
         self.btn_pause.config(state="disabled", text="⏸ Pausar")
         self.btn_stop.config(state="disabled")
+        if hasattr(self, "inline_vis") and self.inline_vis.winfo_exists():
+            self.inline_vis.set_paused(False)
 
     def toggle_pause(self):
-        if not self.running: 
+        if not self.running:
             return
-            
         self.paused = not self.paused
         set_setting("paused", self.paused)
-        
         if self.paused:
             self.btn_pause.config(text="▶ Reanudar")
             print("[Pausa]")
         else:
-            self.btn_pause.config(text="⏸ Pausar") 
+            self.btn_pause.config(text="⏸ Pausar")
             print("[Reanudar]")
+        if hasattr(self, "inline_vis") and self.inline_vis.winfo_exists():
+            self.inline_vis.set_paused(self.paused)
 
     def stop_run(self):
         global _STOP_REQUESTED
-        if not self.running: 
+        if not self.running:
             return
-            
         _STOP_REQUESTED = True
         set_setting("stop_requested", True)
         print("[Stop solicitado] intentando detener con seguridad…")
@@ -446,7 +594,8 @@ class App(tk.Tk):
             "Simulador de Protocolos (GUI)\n"
             "• Selecciona protocolo, ajusta configuración y ejecuta.\n"
             "• Pausa/Reanuda/Detén sin tocar los protocolos.\n"
-            "• Requiere módulos protocol_* y events.py en el mismo folder."
+            "• Vista animada embebida A↔B que sigue los prints de envío/recepción.\n"
+            "• Requiere módulos Protocols/* y events.py en el mismo folder."
         )
 
     # ---------- Cierre limpio ----------
