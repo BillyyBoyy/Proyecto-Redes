@@ -8,10 +8,10 @@ try:
 except Exception:
     pass
 
-# --- Intento de importar la configuración desde auxiliar.py ---
+# --- Intento de importar la configuración desde events.py ---
 # Si no existe o no exporta las funciones, usamos un fallback en memoria.
 try:
-    from auxiliar import set_setting, get_setting  # type: ignore
+    from events import set_setting, get_setting  # type: ignore
 except Exception:
     _SETTINGS = {"error_rate": 0.0, "timeout_prob": 0.0, "step_delay": 0.25,
                  "paused": False, "stop_requested": False}

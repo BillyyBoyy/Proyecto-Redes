@@ -1,5 +1,5 @@
 # protocol_selective_repeat.py
-from auxiliar import Packet, Frame, fmt_frame, EventType, Event, sleep_step
+from events import Packet, Frame, fmt_frame, EventType, Event, sleep_step
 
 class SelectiveRepeatBidiProtocol:
     """

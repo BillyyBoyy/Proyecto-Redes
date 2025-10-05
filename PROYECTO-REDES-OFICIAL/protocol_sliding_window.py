@@ -1,5 +1,5 @@
 
-from auxiliar import Packet, Frame, fmt_frame, EventType, Event, sleep_step
+from events import Packet, Frame, fmt_frame, EventType, Event, sleep_step
 
 class SlidingWindowProtocol:
     """Bidirectional 1-bit sliding window (stop-and-wait with piggybacked ACK)."""

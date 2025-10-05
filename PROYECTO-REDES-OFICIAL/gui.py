@@ -1,7 +1,7 @@
 # GUI.py
 # Interfaz gráfica para lanzar y observar los protocolos de la simulación.
 # Pausa/Reanuda/Detén sin tocar los protocolos:
-#  - Parche a auxiliar.sleep_step (cooperativo)
+#  - Parche a events.sleep_step (cooperativo)
 #  - Chequeo de pausa/stop en sys.stdout.write (TextRedirector.write)
 
 import sys
@@ -22,7 +22,7 @@ _STOPPING = False  # Bandera para indicar que estamos en proceso de stop
 
 # --- Import de configuración y utilidades del proyecto -----------------------
 try:
-    from auxiliar import set_setting, get_setting  # type: ignore
+    from events import set_setting, get_setting  # type: ignore
 except Exception:
     _SETTINGS = {"error_rate": 0.0, "timeout_prob": 0.0, "step_delay": 0.25,
                  "paused": False, "stop_requested": False}
@@ -35,7 +35,7 @@ except Exception:
 # PARCHEAR sleep_step ANTES de importar los protocolos
 # ---------------------------------------------------------------------------
 try:
-    import auxiliar as _aux  # type: ignore
+    import events as _aux  # type: ignore
 
     if hasattr(_aux, "sleep_step"):
         def _patched_sleep_step(dt: Optional[float] = None):
@@ -446,7 +446,7 @@ class App(tk.Tk):
             "Simulador de Protocolos (GUI)\n"
             "• Selecciona protocolo, ajusta configuración y ejecuta.\n"
             "• Pausa/Reanuda/Detén sin tocar los protocolos.\n"
-            "• Requiere módulos protocol_* y auxiliar.py en el mismo folder."
+            "• Requiere módulos protocol_* y events.py en el mismo folder."
         )
 
     # ---------- Cierre limpio ----------
