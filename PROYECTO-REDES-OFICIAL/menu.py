@@ -23,12 +23,12 @@ except Exception:
         _SETTINGS[key] = value
 
 # --- Import de pruebas de protocolos ---
-from protocol_utopia import test as test_utopia
-from protocol_stop_and_wait import test as test_snw
-from protocol_par import test as test_par
-from protocol_sliding_window import test as test_sw
-from protocol_go_back_n import test as test_gbn
-from protocol_selective_repeat import test as test_sr
+from Protocols.protocol_utopia import test as test_utopia
+from Protocols.protocol_stop_and_wait import test as test_snw
+from Protocols.protocol_par import test as test_par
+from Protocols.protocol_sliding_window import test as test_sw
+from Protocols.protocol_go_back_n import test as test_gbn
+from Protocols.protocol_selective_repeat import test as test_sr
 
 
 def clear():
