@@ -1,4 +1,3 @@
-
 from events import Packet, Frame, fmt_frame, EventType, Event, get_setting, sleep_step
 
 class PARProtocol:
