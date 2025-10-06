@@ -96,7 +96,7 @@ pip install -r requirements.txt
 Para ejecutar el proyecto, escriba en la terminal
 
 ```sh
-python3 -m src.ui.main
+python3 gui.py
 ```
 
 <p align="right">(<a href="#readme-top">Volver al inicio</a>)</p>
