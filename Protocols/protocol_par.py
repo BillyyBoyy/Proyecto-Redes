@@ -49,7 +49,7 @@ class PARProtocol:
             ok = self._deliver_or_retransmit(f)
             steps += 1
 
-        print("✔ Entrega en B:", [fr.packet.data for fr in self.dest])
+        print(" Entrega en B:", [fr.packet.data for fr in self.dest])
 
 def test(data=None):
     if data is None:

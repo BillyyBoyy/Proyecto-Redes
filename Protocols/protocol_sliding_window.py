@@ -2,13 +2,13 @@
 from events import Packet, Frame, fmt_frame, EventType, Event, sleep_step
 
 class SlidingWindowProtocol:
-    """Bidirectional 1-bit sliding window (stop-and-wait with piggybacked ACK)."""
+    """Sliding window bidireccional."""
     def __init__(self, a_messages, b_messages):
         self.a_msgs = [Packet(str(x)) for x in a_messages]
         self.b_msgs = [Packet(str(x)) for x in b_messages]
         self.a_seq = 0
         self.b_seq = 0
-        self.medium = []  # frames in transit
+        self.medium = []  # frames en tránsito
         self.a_outstanding = None
         self.b_outstanding = None
         self.a_delivered = []
@@ -39,7 +39,7 @@ class SlidingWindowProtocol:
         ev = Event.wait_for_event_static([EventType.FRAME_ARRIVAL, EventType.CKSUM_ERR, EventType.TIMEOUT])
         if ev.event_type != EventType.FRAME_ARRIVAL:
             print(f"× {direction} perdió {fmt_frame(f)} ({ev.event_type}). Retransmisión en el próximo turno.")
-            # Put back as outstanding for retransmission
+            # Poner de vuelta para retransmisión
             if direction == "A->B":
                 self.a_msgs.insert(0, f.packet)
                 self.a_outstanding = None
@@ -49,7 +49,7 @@ class SlidingWindowProtocol:
             sleep_step()
             return
 
-        # Arrived
+        # Llegó al frame
         if direction == "A->B":
             self.a_seq = 1 - self.a_seq
             self.a_delivered.append(f.packet.data)
@@ -70,8 +70,8 @@ class SlidingWindowProtocol:
             self._send_from_b()
             self._process_medium()
             steps += 1
-        print("✔ Entregado en B:", self.a_delivered)
-        print("✔ Entregado en A:", self.b_delivered)
+        print(" Entregado en B:", self.a_delivered)
+        print(" Entregado en A:", self.b_delivered)
 
 def test(a_messages=None, b_messages=None):
     if a_messages is None:

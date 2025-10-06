@@ -1,17 +1,17 @@
 import os
 import sys
 
-# --- Forzar stdout/stderr a UTF-8 para evitar UnicodeEncodeError en Windows ---
+# Forzar stdout/stderr a UTF-8 para evitar UnicodeEncodeError en Windows 
 try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Python 3.7+
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
 
-# --- Intento de importar la configuración desde events.py ---
-# Si no existe o no exporta las funciones, usamos un fallback en memoria.
+# Intento de importar la configuración desde events.py 
+# Si no existe o no exporta las funciones, se usa un fallback en memoria.
 try:
-    from events import set_setting, get_setting  # type: ignore
+    from events import set_setting, get_setting  
 except Exception:
     _SETTINGS = {"error_rate": 0.0, "timeout_prob": 0.0, "step_delay": 0.25,
                  "paused": False, "stop_requested": False}
@@ -22,7 +22,7 @@ except Exception:
     def set_setting(key: str, value):
         _SETTINGS[key] = value
 
-# --- Import de pruebas de protocolos ---
+# Import de pruebas de protocolos 
 from Protocols.protocol_utopia import test as test_utopia
 from Protocols.protocol_stop_and_wait import test as test_snw
 from Protocols.protocol_par import test as test_par

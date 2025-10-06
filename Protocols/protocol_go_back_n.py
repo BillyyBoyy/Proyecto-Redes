@@ -119,8 +119,8 @@ class GoBackNBidiProtocol:
 
             steps += 1
 
-        print("✔ Entrega en B (desde A):", [fr.packet.data for fr in self.dest_b])
-        print("✔ Entrega en A (desde B):", [fr.packet.data for fr in self.dest_a])
+        print(" Entrega en B (desde A):", [fr.packet.data for fr in self.dest_b])
+        print(" Entrega en A (desde B):", [fr.packet.data for fr in self.dest_a])
 
 
 def test(window_size=3, data_a=None, data_b=None):

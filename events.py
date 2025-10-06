@@ -3,10 +3,10 @@ import time
 from dataclasses import dataclass
 from typing import Optional, List
 
-# ==============================================================
-#  Configuración global de la simulación
-#  (estos valores los ajusta el menú / usuario en tiempo de ejecución)
-# ==============================================================
+'''
+  Configuración global de la simulación
+  (estos valores los ajusta el menú / usuario en tiempo de ejecución)
+'''
 
 SETTINGS = {
     # Probabilidad de que un frame DATA se corrompa o “se pierda” (0.0 a 1.0)
@@ -15,7 +15,7 @@ SETTINGS = {
     "timeout_prob": 0.10,
     # Pausa entre pasos para “animar” la consola (en segundos)
     "step_delay": 0.5,
-    # Estados de control de ejecución (añadidos para la GUI)
+    # Estados de control de ejecución 
     "paused": False,
     "stop_requested": False,
 }
@@ -23,7 +23,7 @@ SETTINGS = {
 def set_setting(key: str, value):
     """
     Actualiza una clave existente en SETTINGS.
-    Si la clave no existe, la crea (necesario para paused/stop_requested).
+    Si la clave no existe, la crea .
     """
     SETTINGS[key] = value
 
@@ -34,9 +34,7 @@ def get_setting(key: str):
     return SETTINGS.get(key)
 
 
-# ==============================================================
 #  Tipos de evento (estados que pueden ocurrir en el canal)
-# ==============================================================
 
 class EventType:
     """
@@ -49,13 +47,11 @@ class EventType:
     NETWORK_LAYER_READY = "network_layer_ready"  # (Reservado) Capa de red lista
 
 
-# ==============================================================
 #  Modelo de evento (compatible con el uso original del proyecto)
-# ==============================================================
 
 class Event:
     """
-    Representa un evento que ocurre en el sistema (ej. llegada de frame).
+    Representa un evento que ocurre en el sistema.
     La clase también expone un generador pseudoaleatorio de eventos
     con sesgo según SETTINGS (error_rate, timeout_prob).
     """
@@ -72,7 +68,7 @@ class Event:
 
     def wait_for_event(self, event_types: List[str]) -> "Event":
         """
-        Envoltura (wrapper) retrocompatible que delega en la versión estática,
+        Envoltura retrocompatible que delega en la versión estática,
         usando SETTINGS globales para la probabilidad de error/timeout.
         """
         return Event.wait_for_event_static(event_types)
@@ -91,8 +87,6 @@ class Event:
         El resto de la masa de probabilidad se asigna a FRAME_ARRIVAL si está
         entre los event_types. Si no lo está, se normaliza el vector de probs.
 
-        Importante:
-        - Si event_types contiene un único elemento, se retorna ese tal cual.
         - Se respetan los límites [0, 1] para error_rate y timeout_prob.
         """
         # Si no se pasan explícitos, usamos los globales.
@@ -101,12 +95,12 @@ class Event:
         if timeout_prob is None:
             timeout_prob = SETTINGS["timeout_prob"]
 
-        # Caso trivial: solo un tipo de evento posible → retorna ese.
+        # Solo un tipo de evento posible → retorna ese.
         if len(event_types) == 1:
             return Event(event_types[0])
 
-        # Construimos un vector de probabilidades alineado a event_types.
-        # Al inicio, asignamos 0 a todo lo que no sea error/timeout.
+        # Se construye un vector de probabilidades alineado a event_types.
+        # Al inicio, se asigna 0 a todo lo que no sea error/timeout.
         probs: List[float] = []
         for et in event_types:
             if et == EventType.CKSUM_ERR:
@@ -115,17 +109,17 @@ class Event:
             elif et == EventType.TIMEOUT:
                 probs.append(max(0.0, timeout_prob))
             else:
-                # Para FRAME_ARRIVAL (u otros), de momento 0; luego repartimos.
+                # Para FRAME_ARRIVAL (u otros), de momento 0; luego se reparten.
                 probs.append(0.0)
 
-        # Si está FRAME_ARRIVAL, le damos toda la probabilidad restante.
-        # Si no está, normalizamos lo que tengamos para que sume 1.
+        # Si está FRAME_ARRIVAL, se le da toda la probabilidad restante.
+        # Si no está, se normaliza lo que se tenga para que sume 1.
         if EventType.FRAME_ARRIVAL in event_types:
             remaining = max(0.0, 1.0 - sum(probs))
             idx = event_types.index(EventType.FRAME_ARRIVAL)
             probs[idx] = probs[idx] + remaining
         else:
-            total = sum(probs) or 1.0  # evitas división entre 0
+            total = sum(probs) or 1.0  # evita división entre 0
             probs = [p / total for p in probs]
 
         # Muestreo por distribución acumulada (técnica clásica):
@@ -141,14 +135,12 @@ class Event:
         return Event(chosen)
 
 
-# ==============================================================
 #  Modelos de datos: Packet y Frame
-# ==============================================================
 
 @dataclass
 class Packet:
     """
-    Representa los datos “útiles” que viajan dentro de un frame.
+    Representa los datos que viajan dentro de un frame.
     """
     data: str
 
@@ -166,10 +158,7 @@ class Frame:
     acknowledgment_number: int
     packet: Optional[Packet] = None
 
-
-# ==============================================================
-#  Helpers “bonitos” para imprimir y animar en la TUI/CLI
-# ==============================================================
+#  Helpers para imprimir y animar en la CLI
 
 def fmt_frame(frame: Frame) -> str:
     """
@@ -185,9 +174,8 @@ def fmt_frame(frame: Frame) -> str:
 
 def sleep_step(mult: float = 1.0):
     """
-    Pausa la ejecución un momento para “animar” la simulación.
+    Pausa la ejecución un momento para animar la simulación.
     El tiempo es SETTINGS['step_delay'] * mult, pero nunca negativo.
-    Esta versión incluye soporte para pausa y stop desde la GUI.
     """
     # Stop inmediato
     if bool(get_setting("stop_requested")):

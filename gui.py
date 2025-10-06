@@ -1,9 +1,8 @@
-# GUI.py
-# Interfaz gráfica para lanzar y observar los protocolos de la simulación.
-# Pausa/Reanuda/Detén sin tocar los protocolos:
-#  - Parche a events.sleep_step (cooperativo)
-#  - Chequeo de pausa/stop en sys.stdout.write (TextRedirector.write)
-
+''' 
+Interfaz gráfica para lanzar y observar los protocolos de la simulación.
+ Pausa/Reanuda/Detén sin tocar los protocolos
+'''
+  
 import sys
 import threading
 import time
@@ -16,14 +15,14 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter.scrolledtext import ScrolledText
 
-# ---------------- Estado de ejecución (id del hilo runner) -------------------
+# Estado de ejecución (id del hilo runner)
 _RUNNER_TID: Optional[int] = None  # Se asigna al lanzar la simulación
 _STOP_REQUESTED = False            # Bandera global para stop
 _STOPPING = False                  # Bandera para indicar que estamos en proceso de stop
 
-# --- Import de configuración y utilidades del proyecto -----------------------
+# Import de configuración y utilidades del proyecto 
 try:
-    from events import set_setting, get_setting  # type: ignore
+    from events import set_setting, get_setting  
 except Exception:
     _SETTINGS = {"error_rate": 0.0, "timeout_prob": 0.0, "step_delay": 0.25,
                  "paused": False, "stop_requested": False}
@@ -32,9 +31,7 @@ except Exception:
     def set_setting(key: str, value):
         _SETTINGS[key] = value
 
-# ---------------------------------------------------------------------------
-# PARCHEAR sleep_step ANTES de importar los protocolos
-# ---------------------------------------------------------------------------
+# Parchear sleep_step antes de importar los protocolos
 try:
     import events as _aux  # type: ignore
 
@@ -64,9 +61,6 @@ try:
 except Exception:
     _aux = None  # fallback
 
-# ---------------------------------------------------------------------------
-# AHORA importamos las pruebas de protocolos (ya con sleep_step parcheado)
-# ---------------------------------------------------------------------------
 from Protocols.protocol_utopia import test as test_utopia
 from Protocols.protocol_stop_and_wait import test as test_snw
 from Protocols.protocol_par import test as test_par
@@ -74,7 +68,7 @@ from Protocols.protocol_sliding_window import test as test_sw
 from Protocols.protocol_go_back_n import test as test_gbn
 from Protocols.protocol_selective_repeat import test as test_sr
 
-# ------------------------------ Utilidades GUI --------------------------------
+# Utilidades GUI
 def parse_csv(s: str) -> List[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
@@ -92,7 +86,7 @@ class TextRedirector:
         self.widget.after(50, self._drain)
 
     def write(self, msg: str):
-        # Si estamos en proceso de stop, no hacer chequeos de pausa/stop
+        # Si se está en proceso de stop, no hacer chequeos de pausa/stop
         if _STOPPING:
             self.queue.put(msg)
             if self.listener:
@@ -100,7 +94,7 @@ class TextRedirector:
                 except Exception: pass
             return
 
-        # Cooperar SOLO si escribe el hilo runner (no la GUI)
+        # Cooperar si escribe el hilo runner (no la GUI)
         try:
             if _RUNNER_TID is not None and threading.get_ident() == _RUNNER_TID:
                 if _aux is not None and hasattr(_aux, "sleep_step") and not _STOP_REQUESTED:
@@ -137,10 +131,10 @@ class TextRedirector:
     def stop(self):
         self._stop = True
 
-# ------------------------------ Visualizador embebido --------------------------
+# Visualizador 
 class InlineVisualizer(ttk.Frame):
     """
-    Visualizador simple A ↔ B embebido en GUI.
+    Visualizador simple A ↔ B .
     Reacciona a textos impresos por los protocolos:
       "A → medio:"  -> inicia A→B
       "medio → B:"  -> finaliza A→B
@@ -190,7 +184,6 @@ class InlineVisualizer(ttk.Frame):
         c.create_text((self.bx1 + self.bx2)//2, self.by1-10, text="B")
         c.create_line(self.link_left, self.y_link, self.link_right, self.y_link, fill="#999", width=2)
 
-    # API
     def set_paused(self, value: bool):
         if bool(value) != self.paused:
             self.paused = bool(value)
@@ -275,7 +268,7 @@ class InlineVisualizer(ttk.Frame):
             return
         self._schedule_next()
 
-# ------------------------------ Ventana principal -----------------------------
+# Ventana principal 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -302,13 +295,13 @@ class App(tk.Tk):
 
         self._orig_stdout = sys.stdout
         self._orig_stderr = sys.stderr
-        sys.stdout = self.stdout_redirect  # type: ignore
-        sys.stderr = self.stderr_redirect  # type: ignore
+        sys.stdout = self.stdout_redirect  
+        sys.stderr = self.stderr_redirect  
 
         # Inicializar configs visuales con valores actuales
         self._load_current_settings()
 
-    # ---------- UI: Panel izquierdo (controles) ----------
+    # UI: Panel izquierdo (controles) 
     def _build_left_panel(self):
         left = ttk.Frame(self, padding=10)
         left.grid(row=0, column=0, sticky="nsw")
@@ -380,9 +373,8 @@ class App(tk.Tk):
 
         extras = ttk.Frame(left, padding=(0,4,0,0)); extras.grid(row=5, column=0, columnspan=2, sticky="ew")
         ttk.Button(extras, text="Limpiar consola", command=self.clear_console).grid(row=0, column=0, sticky="ew")
-        ttk.Button(extras, text="Acerca de…", command=self._about).grid(row=0, column=1, sticky="ew", padx=(6,0))
 
-    # ---------- UI: Consola + Visualizador ----------
+    # UI: Consola y Visualizador 
     def _build_console_and_visualizer(self):
         right = ttk.Frame(self, padding=10); right.grid(row=0, column=1, sticky="nsew")
         right.rowconfigure(1, weight=1); right.columnconfigure(0, weight=1)
@@ -393,11 +385,11 @@ class App(tk.Tk):
 
         ttk.Separator(right).grid(row=2, column=0, sticky="ew", pady=8)
 
-        # Inline visualizer embebido debajo de la consola
+        # Inline visualizer debajo de la consola
         self.inline_vis = InlineVisualizer(right)
         self.inline_vis.grid(row=3, column=0, sticky="ew")
 
-    # ---------- Lógica de entradas dinámicas ----------
+    # Lógica de entradas dinámicas 
     def _refresh_inputs(self):
         for child in self.inputs_frame.winfo_children():
             child.destroy()
@@ -468,12 +460,12 @@ class App(tk.Tk):
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo aplicar configuración:\n{e}")
 
-    # ---------- Animación: hook de logs ----------
+    # Animación: hook de logs 
     def _on_log_line(self, line: str):
         if hasattr(self, "inline_vis") and self.inline_vis.winfo_exists():
             self.inline_vis.consume_log(line)
 
-    # ---------- Ejecución ----------
+    # Ejecución
     def start_run(self):
         global _RUNNER_TID, _STOP_REQUESTED, _STOPPING
         if self.running:
@@ -583,22 +575,11 @@ class App(tk.Tk):
         set_setting("stop_requested", True)
         print("[Stop solicitado] intentando detener con seguridad…")
 
-    # ---------- Utilidades de consola ----------
+    # Utilidades de consola
     def clear_console(self):
         self.console.delete("1.0", tk.END)
 
-    # ---------- Acerca de ----------
-    def _about(self):
-        messagebox.showinfo(
-            "Acerca de",
-            "Simulador de Protocolos (GUI)\n"
-            "• Selecciona protocolo, ajusta configuración y ejecuta.\n"
-            "• Pausa/Reanuda/Detén sin tocar los protocolos.\n"
-            "• Vista animada embebida A↔B que sigue los prints de envío/recepción.\n"
-            "• Requiere módulos Protocols/* y events.py en el mismo folder."
-        )
-
-    # ---------- Cierre limpio ----------
+    # Cierre limpio 
     def destroy(self):
         global _STOP_REQUESTED, _STOPPING
         try:

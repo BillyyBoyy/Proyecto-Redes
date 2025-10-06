@@ -1,4 +1,3 @@
-# protocol_selective_repeat.py
 from events import Packet, Frame, fmt_frame, EventType, Event, sleep_step
 
 class SelectiveRepeatBidiProtocol:
@@ -8,14 +7,6 @@ class SelectiveRepeatBidiProtocol:
     - Los frames pueden llegar fuera de orden; el receptor los bufferiza y entrega en orden.
     - Solo se retransmiten los frames con error/timeout (no se hace rollback completo).
     - Turnos alternados: primero A→B, luego B→A.
-
-    Prints compatibles con el resto del proyecto:
-      A → medio: [DATA ...]
-      medio → B (llegó): [DATA ...]
-      B ↓ capa_red (entregado): [DATA ...]
-      B → medio: [DATA ...]
-      medio → A (llegó): [DATA ...]
-      A ↓ capa_red (entregado): [DATA ...]
     """
 
     def __init__(self, window_size, data_a, data_b):
@@ -25,17 +16,17 @@ class SelectiveRepeatBidiProtocol:
         self.frames_ab = [Frame("data", i, 0, Packet(str(d))) for i, d in enumerate(data_a)]
         self.frames_ba = [Frame("data", i, 0, Packet(str(d))) for i, d in enumerate(data_b)]
 
-        # ----- Estado A→B -----
+        # Estado A→B 
         self.n_ab = len(self.frames_ab)
         self.base_ab = 0
         self.next_ab = 0
-        self.pending_ab = {}   # seq -> frame aún no "ackeado"
+        self.pending_ab = {}   # seq -> frame aún no confirmado
         self.medium_ab = []    # frames en tránsito A→B
         self.recvbuf_b = {}    # buffer en B por seq
         self.expected_b = 0    # próximo en orden que B puede entregar
         self.dest_b = []       # entregados en orden a B
 
-        # ----- Estado B→A -----
+        # Estado B→A 
         self.n_ba = len(self.frames_ba)
         self.base_ba = 0
         self.next_ba = 0
@@ -45,7 +36,7 @@ class SelectiveRepeatBidiProtocol:
         self.expected_a = 0
         self.dest_a = []
 
-    # ======================== A → B ========================
+    # A → B 
     def _send_window_ab(self):
         while self.next_ab < self.base_ab + self.w and self.next_ab < self.n_ab:
             f = self.frames_ab[self.next_ab]
@@ -88,7 +79,7 @@ class SelectiveRepeatBidiProtocol:
             self.base_ab += 1
             self.expected_b += 1
 
-    # ======================== B → A ========================
+    # B → A 
     def _send_window_ba(self):
         while self.next_ba < self.base_ba + self.w and self.next_ba < self.n_ba:
             f = self.frames_ba[self.next_ba]
@@ -128,7 +119,7 @@ class SelectiveRepeatBidiProtocol:
             self.base_ba += 1
             self.expected_a += 1
 
-    # ======================== Orquestación ========================
+    # Orquestación 
     def start(self):
         print(f"\n=== SELECTIVE REPEAT (bidireccional, ventana = {self.w}) ===")
         steps = 0
@@ -144,8 +135,8 @@ class SelectiveRepeatBidiProtocol:
                 self._wait_and_process_ba()
             steps += 1
 
-        print("✔ Entrega en B (desde A):", [fr.packet.data for fr in self.dest_b])
-        print("✔ Entrega en A (desde B):", [fr.packet.data for fr in self.dest_a])
+        print(" Entrega en B (desde A):", [fr.packet.data for fr in self.dest_b])
+        print(" Entrega en A (desde B):", [fr.packet.data for fr in self.dest_a])
 
 
 def test(window_size=3, data_a=None, data_b=None):

@@ -55,15 +55,15 @@ class UtopiaProtocol:
     def _send(self):
         """
         Saca el siguiente frame de la cola de A y lo pone en el medio.
-        (No hay fallos: lo que se envía, eventualmente se recibirá.)
+        (No hay fallos: lo que se envía, se va recibir.)
         """
         f = self.source_network.pop(0)
         self.medium.append(f)
 
-        # Línea original (conservada para compatibilidad con logs/pruebas)
+        # Línea original 
         print("A → medio:", fmt_frame(f))
 
-        # Pausa de “animación” (no altera la lógica)
+        # Pausa de “animación” 
         sleep_step()
 
     def _receive(self):
@@ -74,35 +74,33 @@ class UtopiaProtocol:
         f = self.medium.pop(0)
         self.dest_network.append(f)
 
-        # Línea original (conservada para compatibilidad con logs/pruebas)
+        # Línea original 
         print("medio → B:", fmt_frame(f))
 
         # Pausa de “animación”
         sleep_step()
 
-        # Actualiza métrica
         self.delivered += 1
 
     def start(self):
         """
         Ejecuta el ciclo completo:
           mientras falten entregas: enviar desde A y luego recibir en B.
-        (En Utopía, cada send va seguido por su receive 1:1.)
         """
         self._ui_header()
         while self.delivered < self.total:
             self._send()
             self._receive()
 
-        # Resumen final (misma info de antes, solo con un marco más claro)
+        # Resumen final 
         self._ui_divider()
-        print("✔ Entrega completa en B:",
+        print(" Entrega completa en B:",
               [fr.packet.data for fr in self.dest_network])
         print("═" * 62)
 
 def test(data=None):
     """
-    Función de prueba/ejemplo: mantiene la misma firma y comportamiento.
+    Función de prueba/ejemplo
     """
     if data is None:
         data = ["a", "b", "c"]

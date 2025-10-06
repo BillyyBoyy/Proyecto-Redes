@@ -1,4 +1,3 @@
-# stop_and_wait.py — Stop-and-Wait con ACK explícito (compatible con tu GUI y events.py)
 
 from events import Packet, Frame, fmt_frame, sleep_step
 
@@ -26,7 +25,7 @@ class StopAndWaitProtocol:
         self.dest_network = []
 
         # Estado del emisor A
-        self.awaiting_ack = False          # ¿A está esperando el ACK del último DATA?
+        self.awaiting_ack = False          # A está esperando el ACK del último DATA
         self.last_sent_seq = None          # s del último DATA enviado
 
     def start(self):
@@ -35,7 +34,7 @@ class StopAndWaitProtocol:
         # Continuar mientras haya por enviar, algo en tránsito o un ACK pendiente
         while self.source_network or self.medium_ab or self.medium_ba or self.awaiting_ack:
 
-            # 1) A emite DATA si no está esperando ACK y aún hay frames en su cola
+            # A emite DATA si no está esperando ACK y aún hay frames en su cola
             if not self.awaiting_ack and self.source_network:
                 data_frame = self.source_network.pop(0)           # Frame("data", s, a=0, Packet(...))
                 self.last_sent_seq = data_frame.sequence_number   # recordar s del DATA emitido
@@ -45,7 +44,7 @@ class StopAndWaitProtocol:
                 print("A → medio:", fmt_frame(data_frame))
                 sleep_step()
 
-            # 2) Tránsito del DATA A→B por el medio
+            # Tránsito del DATA A→B por el medio
             if self.medium_ab:
                 f = self.medium_ab.pop(0)  # Llega a B
                 print("medio → B:", fmt_frame(f))
@@ -53,27 +52,26 @@ class StopAndWaitProtocol:
                 self.dest_network.append(f)
                 sleep_step()
 
-                # 3) B genera y envía ACK con acknowledgment_number = s recibido
+                # B genera y envía ACK con acknowledgment_number = s recibido
                 ack = Frame("ack", 0, f.sequence_number, None)    # payload None en ACK
                 self.medium_ba.append(ack)
 
                 print("B → medio:", fmt_frame(ack))
                 sleep_step()
 
-            # 4) Tránsito del ACK B→A por el medio
+            # Tránsito del ACK B→A por el medio
             if self.medium_ba:
                 ack = self.medium_ba.pop(0)  # Llega a A
                 print("medio → A:", fmt_frame(ack))
                 sleep_step()
 
-                # 5) A procesa el ACK; si coincide con el último s enviado, libera el siguiente DATA
+                # A procesa el ACK; si coincide con el último s enviado, libera el siguiente DATA
                 if self.awaiting_ack and ack.acknowledgment_number == self.last_sent_seq:
                     self.awaiting_ack = False
                     self.last_sent_seq = None
-                # (Caso feliz: siempre coincide; sin pérdidas ni timeouts)
 
         # Resumen de entrega en B (payloads en orden)
-        print("✔ Entrega completa en B:", [fr.packet.data for fr in self.dest_network])
+        print(" Entrega completa en B:", [fr.packet.data for fr in self.dest_network])
 
 
 def test(data=None):

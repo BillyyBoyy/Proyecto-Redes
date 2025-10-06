@@ -1,21 +1,20 @@
-# visualizer.py
-# Vista animada del enlace A ↔ B con dos carriles (superior A→B, inferior B→A).
-# Reacciona a los prints del protocolo:
-#   "A → medio:"   -> inicia A→B
-#   "medio → B:"   -> finaliza A→B
-#   "B → medio:"   -> inicia B→A
-#   "medio → A:"   -> finaliza B→A
-#
-# Además detecta ACK si la línea contiene "[ACK" y pinta DATA/ACK con colores distintos.
-# Soporta simultaneidad y colas por carril.
-
+'''
+Vista animada del enlace A ↔ B con dos carriles (superior A→B, inferior B→A).
+Reacciona a los prints del protocolo:
+  "A → medio:"   -> inicia A→B
+  "medio → B:"   -> finaliza A→B
+  "B → medio:"   -> inicia B→A
+  "medio → A:"   -> finaliza B→A
+Además detecta ACK si la línea contiene "[ACK" y pinta DATA/ACK con colores distintos.
+Soporta simultaneidad y colas por carril.
+'''
 import tkinter as tk
 from tkinter import ttk
 import re
 from collections import deque
 
 class LinkVisualizer(tk.Toplevel):
-    # --- Regex para detectar eventos en el log ---
+    # Regex para detectar eventos en el log 
     RE_A_TO_MED = re.compile(r"^\s*A\s*→\s*medio\s*:", re.I)
     RE_MED_TO_B = re.compile(r"^\s*medio\s*→\s*B\s*:", re.I)
     RE_B_TO_MED = re.compile(r"^\s*B\s*→\s*medio\s*:", re.I)
@@ -23,8 +22,8 @@ class LinkVisualizer(tk.Toplevel):
     RE_IS_ACK   = re.compile(r"\[ACK\b", re.I)
 
     # Colores
-    COLOR_DATA = "#2E6FE7"  # azul
-    COLOR_ACK  = "#2BB673"  # verde
+    COLOR_DATA = "#2E6FE7"  
+    COLOR_ACK  = "#2BB673"  
     COLOR_LINK = "#999999"
     COLOR_BOX  = "#EAF2FF"
     COLOR_OUT  = "#4A77F0"
@@ -69,7 +68,7 @@ class LinkVisualizer(tk.Toplevel):
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-    # ----------------- UI -----------------
+    # UI
     def _build_ui(self):
         wrap = ttk.Frame(self, padding=10)
         wrap.pack(fill="both", expand=True)
@@ -124,7 +123,7 @@ class LinkVisualizer(tk.Toplevel):
         c.create_line(self.link_left, self.y_bot, self.link_right, self.y_bot, fill=self.COLOR_LINK, width=2)
         c.create_text((self.link_left + self.link_right)//2, self.y_bot + 14, text="B → A", fill="#555")
 
-    # ------------- API pública -------------
+    # API pública
     def set_paused(self, value: bool):
         value = bool(value)
         if value == self.paused:
@@ -150,7 +149,7 @@ class LinkVisualizer(tk.Toplevel):
         self.set_paused(not self.paused)
 
     def reset(self):
-        """Limpia el canvas y estados."""
+        # Limpia el canvas y estados
         for lane in ("A2B", "B2A"):
             st = self.state[lane]
             st["in_flight"] = False
@@ -164,7 +163,7 @@ class LinkVisualizer(tk.Toplevel):
         self._draw_scene()
 
     def consume_log(self, line: str):
-        """Recibe cada línea impresa por los protocolos y la interpreta para animar."""
+        # Recibe cada línea impresa por los protocolos y la interpreta para animar
         s = (line or "").strip()
         if not s:
             return
@@ -187,7 +186,7 @@ class LinkVisualizer(tk.Toplevel):
         if self.RE_MED_TO_A.match(s):
             self._finish_if_lane("B2A"); return
 
-    # ------------- Lógica de carriles / animación -------------
+    # Lógica de carriles / animación 
     def _enqueue_or_start(self, lane: str, is_ack: bool):
         st = self.state[lane]
         kind = "ACK" if is_ack else "DATA"
@@ -236,7 +235,7 @@ class LinkVisualizer(tk.Toplevel):
             except Exception: pass
             st["after_id"] = None
 
-        # ¿Hay cola pendiente? iniciar siguiente
+        # Si hay cola pendiente iniciar siguiente
         if st["queue"]:
             nxt_kind = st["queue"].popleft()
             self._start_lane(lane, nxt_kind)
@@ -268,7 +267,7 @@ class LinkVisualizer(tk.Toplevel):
         if reached:
             st["in_flight"] = False
             st["after_id"] = None
-            # Si no llega el "medio → X" por logs, aún así encadenamos siguiente
+            # Si no llega el "medio → X" por logs, aún así se encadena el siguiente
             if st["queue"]:
                 nxt_kind = st["queue"].popleft()
                 self._start_lane(lane, nxt_kind)
